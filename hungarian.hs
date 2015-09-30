@@ -7,6 +7,7 @@ main = do
 		let testMatrix = fromLists [[90,75,75,80],[35,85,55,65],[125,95,90,105],[45,110,95,115]]
 		let brideGroomMatrix = fromLists [[7,4,7,3,10],[5,9,3,8,7],[3,5,6,2,9],[6,5,0,4,8],[0,0,0,0,0]]
 		let matrix1a = fromLists [[17,4,10],[15,5,8],[18,7,11]]
+		let matrix1b = fromLists [[3,-2,0,1],[5,3,-3,4],[2,7,5,3],[5,-2,0,1],[5,-2,0,1]]
 		let matrix5a = fromLists [[150,65,210,135,0],[175,75,230,155,0],[135,85,200,140,0],[140,70,190,130,0],[170,50,200,160,0]]
 		let matrix6 = fromLists [[20,15,10,10,17,23,25,5,15]
 							,[10,10,12,15,9,7,8,7,8]
@@ -32,6 +33,10 @@ main = do
 		print matrix1a
 		putStrLn "Optimal assignment of Matrix a"
 		print $ hungarian matrix1a
+		putStrLn "Matrix b"
+		print matrix1b
+		putStrLn "Optimal assignment of Matrix b"
+		print $ hungarian matrix1b
 		putStrLn "Matrix 5a (Bidding Coins)"
 		putStrLn "Matrix 5a"
 		print matrix5a
@@ -81,7 +86,41 @@ optimize val matr mls = if isOptimal val matr mls
 							rmls = removeAllRedundantLines val matr2 fmls
 							cmls = cleanOutRedundantLines val matr2 rmls
 							in optimize val matr2 cmls
-							
+
+
+hungarian2 :: Matrix Int -> Matrix Int
+hungarian2 matr =  let  
+					smatr = subtractMins matr
+					srch = findInMatrix 0 smatr
+					pp = producePairs srch
+					rmls = removeRedundantPairs srch pp
+					in optimize2 0 srch pp
+
+optimize2 :: Int -> Matrix Int -> [(Int,Int)] -> [(MatrixLine,Int)] -> Matrix Int
+optimize2 val matr srch pp = if isOptimal val matr pp
+						then matr
+						else let
+							rowSearch = searchLines (rowLinesOf mls) (\_ -> True) matr
+							colSearch = searchLines (colLinesOf mls) (\_ -> True) matr
+							search = union rowSearch colSearch
+							invs = invertSearch search matr
+							min = minimumIn matr invs
+							matr1 = mapOverSearch (\x -> x - min) invs matr
+							matr2 = mapOverSearch (\x -> x + min) (intersect rowSearch colSearch) matr1
+							fmls = produceLines $ findInMatrix val matr2
+							rmls = removeAllRedundantLines val matr2 fmls
+							cmls = cleanOutRedundantLines val matr2 rmls
+							in optimize val matr2 cmls
+
+--True if the matrix lines cover all of the target values
+isConsistent2 :: [(Int,Int)] -> [MatrixLine]  -> Bool
+isConsistent num matr mls = (findInMatrix num matr \\ findInLines mls num matr) == []
+
+--True if isConsistent and number of matrix lines is equal to n
+isOptimal2 :: (Eq a) => a -> Matrix a -> [MatrixLine]  -> Bool
+isOptimal num matr mls = isConsistent num matr mls && length mls == nrows matr && length mls == ncols matr
+
+
 
 minimumIn :: (Ord a) => Matrix a -> [(Int,Int)] -> a
 minimumIn matr mls = minimum $ getFromSearch matr mls
@@ -115,6 +154,104 @@ findValCols val = sort . removeDuplicates . (foldr (\l arr-> findVals val l ++ a
 
 findZeroLines = findValCols 0
 
+
+{-removeRedundantPairs :: [(Int,Int)] -> [(MatrixLine, Int)] -> [(MatrixLine, Int)]
+removeRedundantPairs val pairs = let
+									smls = sortPairs val matr mls
+									perm = permutations $ head gmls
+											combos = map (\lines -> lines ++ (concat (tail gmls))) perm
+											reducedCombosHead = head $ sortByLength $ map (removeLeadingRedundantLines val matr) combos
+											in if mls \\ reducedCombosHead == []
+												then reducedCombosHead
+												else removeAllRedundantLines val matr reducedCombosHead
+-}
+--produces all lines that cross through search
+producePairs :: [(Int,Int)] -> [(MatrixLine,Int)]
+producePairs locs = let
+						rowGrouped = groupLocs True $ sortLocs True locs
+						colGrouped = groupLocs False $ sortLocs False locs
+						in map (\gr -> (RowLine (fst $ gr!!0), length gr)) rowGrouped ++ map (\gr -> (ColLine (snd $ gr!!0), length gr)) colGrouped
+
+produceLines2 :: [(Int,Int)] -> [MatrixLine]
+producePairs locs = let
+						rowGrouped = groupLocs True $ sortLocs True locs
+						colGrouped = groupLocs False $ sortLocs False locs
+						in map (\gr -> (RowLine (fst $ gr!!0), length gr)) rowGrouped ++ map (\gr -> (ColLine (snd $ gr!!0), length gr)) colGrouped
+
+groupLocs :: Bool -> [(Int,Int)] -> [[(Int,Int)]]
+groupLocs b = groupBy (eqLocs b)
+
+sortLocs :: Bool -> [(Int,Int)] -> [(Int,Int)]
+sortLocs b = sortBy (compareLocs b)
+
+eqLocs :: Bool -> (Int,Int) -> (Int, Int) -> Bool
+eqLocs byRow pairX pairY = let 
+					   			x = if byRow then fst pairX else snd pairX
+					   		 	y = if byRow then fst pairY else snd pairY
+					   		 	in x == y
+
+compareLocs :: Bool -> (Int,Int) -> (Int, Int) -> Ordering
+compareLocs byRow pairX pairY 
+							| x < y = LT
+					   		| x > y = GT
+					   		| x == y = EQ
+					   		where
+					   			x = if byRow then fst pairX else snd pairX
+					   		 	y = if byRow then fst pairY else snd pairY
+
+removeRedundantPairs :: [(Int,Int)] -> [(MatrixLine, Int)] -> [(MatrixLine, Int)]
+removeRedundantPairs srch pairs = let
+									spairs = sortPairs pairs
+									ml = fst $ last spairs
+									npairs = iterateRemove (isRowLine ml) (findInLineLocs ml srch) spairs
+									in if length npairs <= 2 then npairs else (removeRedundantPairs srch (init npairs)) ++ [last npairs]
+
+iterateRemove ::  Bool -> [Int] -> [(MatrixLine, Int)]  -> [(MatrixLine, Int)]
+iterateRemove isRow locs spairs = dropZeroPairs $ 
+										if isRow
+											then foldr (\x acc -> map (reduceMatchingColPair x) acc) spairs locs 
+											else foldr (\x acc -> map (reduceMatchingRowPair x) acc) spairs locs 
+										 
+
+--Locates where values on line appears in matrix
+findInLineLocs :: MatrixLine -> [(Int,Int)] -> [Int]
+findInLineLocs (RowLine num) = foldr (\(x,y) acc -> if x == num then y:acc else acc) []
+findInLineLocs (ColLine num) = foldr (\(x,y) acc -> if y == num then x:acc else acc) []
+									
+
+dropZeroPairs :: [(MatrixLine, Int)] -> [(MatrixLine, Int)]
+dropZeroPairs pairs = filter (\(ml,y) -> y /= 0) pairs 
+
+reduceMatchingRowPair :: Int -> (MatrixLine, Int) -> (MatrixLine, Int)
+reduceMatchingRowPair x (RowLine y, z) = if x == y then (RowLine y, z - 1) else (RowLine y, z)
+reduceMatchingRowPair _ (ColLine y, z) = (ColLine y, z)
+
+reduceMatchingColPair :: Int -> (MatrixLine, Int) -> (MatrixLine, Int)
+reduceMatchingColPair x (ColLine y, z) = if x == y then (ColLine y, z - 1) else (ColLine y, z)
+reduceMatchingColPair _ (RowLine y, z) = (RowLine y, z)
+
+addToRowPair :: Int -> (MatrixLine, Int) -> (MatrixLine, Int)
+addToRowPair x (RowLine y, z) = (RowLine y, x + z)
+addToRowPair _ (ColLine y, z) = (ColLine y, z)
+
+addToColPair :: Int -> (MatrixLine, Int) -> (MatrixLine, Int)
+addToColPair x (ColLine y, z) = (ColLine y, x + z)
+addToColPair _ (RowLine y, z) = (RowLine y, z)
+
+sortPairs :: [(MatrixLine,Int)] -> [(MatrixLine,Int)]
+sortPairs = sortBy comparePairs
+
+
+
+comparePairs :: (MatrixLine, Int) -> (MatrixLine, Int) -> Ordering
+comparePairs pairX pairY | x < y = LT
+					   		 | x > y = GT
+					   		 | x == y = EQ
+					   		 where
+					   			x = snd pairX
+					   		 	y = snd pairY
+
+---------------------OLD--------------------------------
 
 cleanOutRedundantLines :: (Eq a, Num a) => a -> Matrix a -> [MatrixLine] -> [MatrixLine]
 cleanOutRedundantLines val matr mls = let
@@ -164,8 +301,8 @@ sortByLength = sortBy compareLengths
 
 compareLengths :: [a] -> [a] -> Ordering
 compareLengths l1 l2 | length l1 < length l2 = LT
-					       | length l1 > length l2 = GT
-					       | otherwise  = EQ
+					 | length l1 > length l2 = GT
+					 | otherwise  = EQ
 
 
 
@@ -178,7 +315,7 @@ isOptimal :: (Eq a) => a -> Matrix a -> [MatrixLine]  -> Bool
 isOptimal num matr mls = isConsistent num matr mls && length mls == nrows matr && length mls == ncols matr
 
 
-sortLinesBy :: (MatrixLine -> MatrixLine -> Ordering) -> [MatrixLine] -> [MatrixLine]
+sortLinesBy :: (MatrixLine -> MatrixLine -> Ordering) -> [MatrixLine] -> [MatrixLine] 
 sortLinesBy = sortBy
 
 --Sorts lines by appearances of value in line
@@ -198,6 +335,8 @@ compareLineCount a m l1 l2 | lineCount l1 a m < lineCount l2 a m = LT
 --produces all lines that cross through search
 produceLines :: [(Int,Int)] -> [MatrixLine]
 produceLines = removeDuplicates . concat . map (\(i,j) -> [RowLine i, ColLine j])
+
+
 
 
 --Locates where values on line appears in matrix
