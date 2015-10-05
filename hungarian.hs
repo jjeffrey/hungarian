@@ -1,13 +1,13 @@
-module Main (hungarian, hungarianMax, main) where
+module Hungarian (hungarianMin, hungarianMax) where
 import Data.Matrix
 import Data.List
 import qualified Data.Vector as Vector
 
-main = do
+test = do
         let testMatrix = fromLists [[90,75,75,80],[35,85,55,65],[125,95,90,105],[45,110,95,115]]
         let brideGroomMatrix = fromLists [[7,4,7,3,10],[5,9,3,8,7],[3,5,6,2,9],[6,5,0,4,8],[0,0,0,0,0]]
         let matrix1a = fromLists [[17,4,10],[15,5,8],[18,7,11]]
-        let matrix1b = fromLists [[3,-2,0,1],[5,3,-3,4],[2,7,5,3],[5,-2,0,1],[5,-2,0,1]]
+        let matrix1b = fromLists [[3,-2,0,1],[5,3,-3,4],[2,7,5,3],[5,-2,0,1]]
         let matrix5a = fromLists [[150,65,210,135,0],[175,75,230,155,0],[135,85,200,140,0],[140,70,190,130,0],[170,50,200,160,0]]
         let matrix6 = fromLists [[20,15,10,10,17,23,25,5,15]
                                 ,[10,10,12,15,9,7,8,7,8]
@@ -22,33 +22,31 @@ main = do
         putStrLn "Bulldozer Matrix"
         print testMatrix
         putStrLn "Optimal assignment of Bulldozer Matrix"
-        print $ hungarian2 testMatrix
+        print $ hungarianMin testMatrix
         putStrLn "Bride-Groom Test"
         putStrLn "BrideGroom Matrix"
         print brideGroomMatrix
         putStrLn "Optimal assignment of Bride-Groom Matrix"
         print $ hungarianMax brideGroomMatrix
-        let bgm = hungarianMax2 brideGroomMatrix
-        print $ hungarian2 bgm
         putStrLn "Problem #1"
         putStrLn "Matrix a"
         print matrix1a
         putStrLn "Optimal assignment of Matrix a"
-        print $ hungarian2 matrix1a
+        print $ hungarianMin matrix1a
         putStrLn "Matrix b"
         print matrix1b
         putStrLn "Optimal assignment of Matrix b"
-        --print $ hungarian matrix1b
+        print $ hungarianMin matrix1b
         putStrLn "Matrix 5a (Bidding Coins)"
         putStrLn "Matrix 5a"
         print matrix5a
         putStrLn "Optimal assignment of Matrix 5a"
-        print $ hungarianMax2 matrix5a
+        print $ hungarianMax matrix5a
         putStrLn "Matrix 6 (Players)"
         putStrLn "Matrix 6"
         print matrix6
         putStrLn "Optimal assignment of Matrix 6"
-        print $ hungarianMax2 matrix6
+        print $ hungarianMax matrix6
 
 
 data MatrixLine = RowLine Int | ColLine Int deriving (Eq, Show)
@@ -73,59 +71,30 @@ colLinesOf = filter isColLine
 
 
 
---OLD IMPLEMENTATION (slower, fails on test Matrix b and Matrix 6)--
+--EXPORTED FUNCTIONS--
 
-hungarian :: Matrix Int -> Matrix Int
-hungarian matr =
-        let smatr = subtractMins matr
-            fmls = produceLines $ findInMatrix 0 smatr
-            rmls = removeAllRedundantLines 0 smatr fmls
-            cmls = cleanOutRedundantLines 0 smatr rmls
-            in optimize 0 smatr rmls
+hungarianMin :: Matrix Int -> Matrix Int
+hungarianMin matr = let smatr = subtractMins matr
+                        srch = findInMatrix 0 smatr
+                        pp = producePairs srch
+                        newPairs = removeRedundantPairs srch pp
+                        in optimize 0 smatr srch newPairs
 
 hungarianMax :: Matrix Int -> Matrix Int
-hungarianMax matr = hungarian $ mapOverSearch (\num -> num * (-1)) (searchMatrix (const True) matr) matr
-
-optimize :: Int -> Matrix Int -> [MatrixLine] -> Matrix Int
-optimize val matr mls =
-        if isOptimal val matr mls
-        then matr
-        else let matr2 = moreOptimizedMatrix matr mls
-                 fmls = produceLines $ findInMatrix val matr2
-                 rmls = removeAllRedundantLines val matr2 fmls
-                 cmls = cleanOutRedundantLines val matr2 rmls
-                 in optimize val matr2 cmls
-
---True if isConsistent and number of matrix lines is equal to n
-isOptimal :: (Eq a) => a -> Matrix a -> [MatrixLine]  -> Bool
-isOptimal num matr mls = isConsistent num matr mls && length mls == nrows matr && length mls == ncols matr
-
---True if the matrix lines cover all of the target values
-isConsistent :: (Eq a) => a -> Matrix a -> [MatrixLine]  -> Bool
-isConsistent num matr mls = null $ findInMatrix num matr \\ findInLines mls num matr
+hungarianMax matr = hungarianMin $ mapOverSearch (\num -> num * (-1)) (searchMatrix (const True) matr) matr
 
 
 
---NEW IMPLEMENTATION (much faster, only fails on test Matrix b although produces diff (correct?) answers for bridesgroom and bulldozer)--
+--MATRIX OPTIMIZATION--
 
-hungarianMax2 :: Matrix Int -> Matrix Int
-hungarianMax2 matr = hungarian2 $ mapOverSearch (\num -> num * (-1)) (searchMatrix (const True) matr) matr
-
-hungarian2 :: Matrix Int -> Matrix Int
-hungarian2 matr = let smatr = subtractMins matr
-                      srch = findInMatrix 0 smatr
-                      pp = producePairs srch
-                      newPairs = removeRedundantPairs srch pp
-                      in optimize2 0 smatr srch newPairs
-
-optimize2 :: Int -> Matrix Int -> [(Int,Int)] -> [(MatrixLine,Int)] -> Matrix Int
-optimize2 val matr srch pp =
-        if isOptimal2 matr srch pp
+optimize :: Int -> Matrix Int -> [(Int,Int)] -> [(MatrixLine,Int)] -> Matrix Int
+optimize val matr srch pp =
+        if isOptimal matr srch pp
                 then matr
                 else let matr2 = moreOptimizedMatrix matr (map fst pp)
                          newSearch = findInMatrix val matr2
                          minPairs = removeRedundantPairs newSearch $ producePairs newSearch
-                         in optimize2 val matr2 newSearch minPairs
+                         in optimize val matr2 newSearch minPairs
 
 moreOptimizedMatrix :: Matrix Int -> [MatrixLine] -> Matrix Int
 moreOptimizedMatrix matr mls = let rowSearch = searchLines (rowLinesOf mls) (const True) matr
@@ -136,14 +105,13 @@ moreOptimizedMatrix matr mls = let rowSearch = searchLines (rowLinesOf mls) (con
                                    matr1 = mapOverSearch (\x -> x - min) invs matr
                                    in mapOverSearch (+ min) (rowSearch `intersect` colSearch) matr1
 
---True if the matrix lines cover all of the target values
-isConsistent2 :: [MatrixLine] -> [(Int,Int)] -> Bool
-isConsistent2 mls = all (`locationInLines` mls)
-
-
 --True if isConsistent and number of matrix lines is equal to n
-isOptimal2 :: Matrix a -> [(Int,Int)] -> [(MatrixLine,Int)]  -> Bool
-isOptimal2 matr srch mls = isConsistent2 (map fst mls) srch && length mls == nrows matr && length mls == ncols matr
+isOptimal :: Matrix a -> [(Int,Int)] -> [(MatrixLine,Int)]  -> Bool
+isOptimal matr srch mls = isConsistent (map fst mls) srch && length mls == nrows matr && length mls == ncols matr
+
+--True if the matrix lines cover all of the target values
+isConsistent :: [MatrixLine] -> [(Int,Int)] -> Bool
+isConsistent mls = all (`locationInLines` mls)
 
 
 
@@ -315,70 +283,3 @@ removeDuplicates = foldl (\seen x -> if x `elem` seen
 --Creates all combinations of pairs from max a and b
 pairs :: Int -> Int -> [(Int,Int)]
 pairs aMax bMax = [(a,b) | a <- [0 .. aMax], b <- [0 .. bMax]]
-
-
-
-
-
---------------------------------------------------------OLD--------------------------------------------------------
-
-cleanOutRedundantLines :: (Eq a, Num a) => a -> Matrix a -> [MatrixLine] -> [MatrixLine]
-cleanOutRedundantLines val matr mls = let smls = sortLinesByCount val matr mls
-                                          in fst $ foldl(\(mList,index) _ ->
-                                                let splitLines = splitAt index mList
-                                                    linesWithoutCurrent = fst splitLines ++ tail (snd splitLines)
-                                                    in if isConsistent 0 matr linesWithoutCurrent
-                                                                then (linesWithoutCurrent, index)
-                                                                else (mList, index + 1)) (mls,0) mls
-
-removeAllRedundantLines :: (Eq a) => a -> Matrix a -> [MatrixLine] -> [MatrixLine]
-removeAllRedundantLines val matr mls = let smls = sortLinesByCount val matr mls
-                                           gmls = groupByCount val matr smls
-                                           perm = permutations $ head gmls
-                                           combos = map (\lines -> lines ++ concat (tail gmls)) perm
-                                           reducedCombosHead = head $ sortByLength $ map (removeLeadingRedundantLines val matr) combos
-                                           in if null $ mls \\ reducedCombosHead
-                                                then reducedCombosHead
-                                                else removeAllRedundantLines val matr reducedCombosHead
-
-removeLeadingRedundantLines :: (Eq a) => a -> Matrix a -> [MatrixLine] -> [MatrixLine]
-removeLeadingRedundantLines val matr mls = let smls = sortLinesByCount val matr mls
-                                              in if  isConsistent val matr (tail smls)
-                                                        then removeLeadingRedundantLines val matr (tail smls)
-                                                        else smls
-
-groupByCount :: (Eq a) => a -> Matrix a -> [MatrixLine] -> [[MatrixLine]]
-groupByCount val matr = groupBy (equalLineCount val matr)
-
-equalLineCount :: (Eq a) => a -> Matrix a -> MatrixLine -> MatrixLine -> Bool
-equalLineCount a m l1 l2 | lineCount l1 a m == lineCount l2 a m = True
-                         | otherwise = False
-
-sortByLength :: [[a]] -> [[a]]
-sortByLength = sortBy compareLengths
-
-compareLengths :: [a] -> [a] -> Ordering
-compareLengths l1 l2 | length l1 < length l2 = LT
-                                         | length l1 > length l2 = GT
-                                         | otherwise  = EQ
-
-sortLinesBy :: (MatrixLine -> MatrixLine -> Ordering) -> [MatrixLine] -> [MatrixLine]
-sortLinesBy = sortBy
-
---Sorts lines by appearances of value in line
-sortLinesByCount :: (Eq a) => a -> Matrix a -> [MatrixLine] -> [MatrixLine]
-sortLinesByCount val matr = sortLinesBy (compareLineCount val matr)
-
---Finds how many times value appears in line
-lineCount :: (Eq a) => MatrixLine -> a -> Matrix a -> Int
-lineCount (RowLine num) val = foldr (\x sum -> if x == val then sum + 1 else sum) 0 . Vector.toList . getRow (num + 1)
-lineCount (ColLine num) val = foldr (\x sum -> if x == val then sum + 1 else sum) 0 . Vector.toList . getCol (num + 1)
-
-compareLineCount :: (Eq a) => a -> Matrix a -> MatrixLine -> MatrixLine -> Ordering
-compareLineCount a m l1 l2 | lineCount l1 a m < lineCount l2 a m = LT
-                           | lineCount l1 a m > lineCount l2 a m = GT
-                           | otherwise  = EQ
-
---produces all lines that cross through search
-produceLines :: [(Int,Int)] -> [MatrixLine]
-produceLines = removeDuplicates . concatMap (\(i,j) -> [RowLine i, ColLine j])
