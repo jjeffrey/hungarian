@@ -1,4 +1,4 @@
-module Hungarian (hungarianMin, hungarianMax) where
+module Hungarian (test, hungarianMin, hungarianMax) where
 import Data.Matrix
 import Data.List
 import qualified Data.Vector as Vector
@@ -131,20 +131,22 @@ subtractMinFromList array = map (\num -> num - minimum array) array
 
 --produces all lines that cross through search
 producePairs :: [(Int,Int)] -> [(MatrixLine,Int)]
-producePairs locs = let rowGrouped = groupLocs True $ sortLocs True locs
-                        colGrouped = groupLocs False $ sortLocs False locs
-                        in map (\gr -> (RowLine (fst $ head gr), length gr)) rowGrouped ++ map (\gr -> (ColLine (snd $ head gr), length gr)) colGrouped
+producePairs locs = 
+        let rowGrouped = groupLocs True $ sortLocs True locs
+            colGrouped = groupLocs False $ sortLocs False locs
+            in map (\gr -> (RowLine (fst $ head gr), length gr)) rowGrouped ++ map (\gr -> (ColLine (snd $ head gr), length gr)) colGrouped
 
 removeRedundantPairs :: [(Int,Int)] -> [(MatrixLine, Int)] -> [(MatrixLine, Int)]
-removeRedundantPairs srch pairs = let spairs = sortPairs pairs
-                                      ml = fst $ last spairs
-                                      npairs = iterateRemove (isRowLine ml) (findInLineLocs ml srch) spairs
-                                      in if length npairs <= 2 then npairs else removeRedundantPairs srch (init npairs) ++ [last npairs]
+removeRedundantPairs srch pairs = 
+        let spairs = sortPairs pairs
+            ml = fst $ last spairs
+            npairs = iterateRemove (isRowLine ml) (findInLineLocs ml srch) spairs
+            in if length npairs <= 2 then npairs else removeRedundantPairs srch (init npairs) ++ [last npairs]
 
 iterateRemove ::  Bool -> [Int] -> [(MatrixLine, Int)]  -> [(MatrixLine, Int)]
-iterateRemove isRow locs spairs = dropZeroPairs $ if isRow
-                                                        then foldr (\x acc -> map (reduceMatchingColPair x) acc) spairs locs
-                                                        else foldr (\x acc -> map (reduceMatchingRowPair x) acc) spairs locs
+iterateRemove isRow locs spairs = 
+        dropZeroPairs $ if isRow then foldr (\x acc -> map (reduceMatchingColPair x) acc) spairs locs
+                                 else foldr (\x acc -> map (reduceMatchingRowPair x) acc) spairs locs
 
 dropZeroPairs :: [(MatrixLine, Int)] -> [(MatrixLine, Int)]
 dropZeroPairs = filter (\(ml,y) -> y /= 0)
