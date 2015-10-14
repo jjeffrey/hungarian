@@ -10,10 +10,10 @@ instance (Show a) => Show (NamedMatrix a) where
         show (NMatrix string matr) = "\n\n" ++ string ++ "\n\n" ++ show matr
 
 main = do 
-	putStrLn "Enter a number to seed random generator, or type 'get' to use getStdGen."
+	putStrLn "Enter a number to seed random generator with mkStdGen, or type 'new' to use newStdGen."
 	response <- getLine
-	globalStdGen <- getStdGen
-	let stdGen = if response == "get"
+	globalStdGen <- newStdGen
+	let stdGen = if response == "new"
 			then globalStdGen
 			else mkStdGen (read response :: Int)
 	putStrLn "Run benchmarks up to what nxn size matrix?"
@@ -26,14 +26,11 @@ main = do
 
 
 randSquareMatrix :: Int -> Int -> StdGen -> Int -> Matrix Int
-randSquareMatrix lowerLimit upperLimit g x = matrix x x $ \(i,j) -> (randomRs (lowerLimit, upperLimit) g) !! (j + i*x)
+randSquareMatrix lowerLimit upperLimit g x = matrix x x $ \(i,j) -> randomNumbers !! (j + i*x)
+                                                where randomNumbers = randomRs (lowerLimit, upperLimit) g
 
 randTestMatrix = randSquareMatrix 0 1000
 
-nthStdGen :: Int -> StdGen -> StdGen
-nthStdGen x g = if x < 0
-                        then g
-			else nthStdGen (x - 1) $ snd $ next g
 
 generateBenchmarks :: Int -> StdGen -> [Benchmark]
 generateBenchmarks 0 _ = []
